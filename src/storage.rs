@@ -22,10 +22,24 @@ pub enum FileDeleteError {
     FileDeleteError,
 }
 
-pub fn read_storage(path: &'static str) -> Result<String, FileReadError> {
-    let mut in_file = std::env::var("HOME").unwrap();
-    in_file.push_str(path);
-    let f = File::open(in_file);
+pub struct Storage {
+    pub dir: String,
+    pub en_file: String,
+    pub de_file: String,
+}
+
+impl Storage {
+    pub fn new(dir: String, en_file: String, de_file: String) -> Self {
+        Self {
+            dir,
+            en_file,
+            de_file,
+        }
+    }
+}
+
+pub fn read_storage(path: &str) -> Result<String, FileReadError> {
+    let f = File::open(&path);
     match f {
         Ok(mut file) => {
             let mut buffer = String::new();
@@ -46,22 +60,16 @@ pub fn read_storage(path: &'static str) -> Result<String, FileReadError> {
     }
 }
 
-pub fn save_storage(path: &'static str, data: String, force: Option<bool>) -> Result<(), FileSaveError> {
-    let mut in_file = std::env::var("HOME").unwrap();
-    in_file.push_str(path);
-    let mut encrypted_file = std::env::var("HOME").unwrap();
-    encrypted_file.push_str("/twofa.storage");
-
-    if Path::new(encrypted_file.as_str()).exists() && (force.is_some() && force.unwrap().eq(&false) || force.is_none())  {
+pub fn save_storage(path: &str, data: String, force: Option<bool>) -> Result<(), FileSaveError> {
+    if Path::new(&path).exists() && (force.is_some() && force.unwrap().eq(&false) || force.is_none())  {
         return Err(FileSaveError::AlreadyExists);
     }
 
-    let f = File::create(&in_file);
+    let f = File::create(&path);
     match f {
         Ok(mut file) => {
             match file.write_all(data.as_bytes()) {
                 Ok(_) => {
-                    println!("File '{}' created", &in_file);
                     Ok(())
                 },
                 Err(e) => {
@@ -75,17 +83,32 @@ pub fn save_storage(path: &'static str, data: String, force: Option<bool>) -> Re
     }
 }
 
-pub fn delete_file(path: &'static str, logger: &Logger) -> Result<(), &'static str> {
-    let mut file_to_delete = std::env::var("HOME").unwrap();
-    file_to_delete.push_str(path);
-    if let Err(e) = remove_file(&file_to_delete) {
+pub fn delete_file(path: &str, logger: &Logger) -> Result<(), &'static str> {
+    if let Err(e) = remove_file(&path) {
         return Err("Error deleting file");
     }
 
     logger.min(
-        format!("File '{}' deleted", &file_to_delete)
+        format!("File '{}' deleted", &path)
             .as_str()
     );
 
     Ok(())
+}
+
+pub fn get_storage_path() -> Storage {
+    let mut folder_path = std::env::var("HOME").expect("HOME var needed");
+    folder_path.push_str("/.twofa");
+
+    let mut de_file = folder_path.clone();
+    de_file.push_str("/buffer.storage");
+
+    let mut en_file = folder_path.clone();
+    en_file.push_str("/twofa.storage");
+
+    Storage::new(
+        folder_path,
+            en_file,
+            de_file,
+    )
 }

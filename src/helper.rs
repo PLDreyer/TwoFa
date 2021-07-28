@@ -1,5 +1,7 @@
 use std::io::{stdin,stdout,Write};
 use serde_json::{Value};
+use std::fs::{create_dir_all};
+use std::path::{Path};
 
 pub fn prompt_for_input(input: &'static str) -> Result<String, &'static str> {
     let mut s=String::new();
@@ -32,4 +34,27 @@ pub fn merge_json(a: &mut Value, b: Value) {
     }
 
     *a = b;
+}
+
+pub fn create_folder(path: &str) -> () {
+    let file_or_dir = Path::new(path);
+    return if file_or_dir.exists() {
+        if file_or_dir.is_file() {
+            println!("Dir to create is already a file. Aborting");
+            std::process::exit(1);
+        };
+
+        if file_or_dir.is_dir() {
+            println!("Directory already exists.");
+        }
+
+        ()
+    } else {
+        if let Err(_) = create_dir_all(path) {
+            println!("Could not create directories");
+            std::process::exit(1);
+        }
+
+        ()
+    };
 }
