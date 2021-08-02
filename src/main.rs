@@ -11,6 +11,7 @@ use crate::crypto::{encrypt_file, decrypt_file};
 use crate::twofa::{create_twofa_settings, create_code_with_twofa_settings, create_twofa_settings_with_input};
 use crate::logger::{Logger};
 use crate::helper::{prompt_for_input, merge_json, create_folder};
+use clipboard::{ClipboardContext, ClipboardProvider};
 
 #[derive(Clap)]
 #[clap(version = "1.0.0", author = "Paul D. <paullenardo@gmail.com>")]
@@ -36,6 +37,9 @@ pub struct Opts {
     #[clap(short, long, default_value = "base32")]
     /// set encoding
     encoding: String,
+    #[clap(short, long, parse(from_occurrences))]
+    /// copy to clipboard
+    copy: i32,
     #[clap(short, long, parse(from_occurrences))]
     /// set debug level
     debug: i32,
@@ -238,6 +242,13 @@ fn get_code(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(), &'s
     );
 
     let code = create_code_with_twofa_settings(&twofa_settings).expect("Could not get code with settings");
+
+    if &opts.copy > &0 {
+        let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+        if let Err(_) = ctx.set_contents(code.clone()) {
+            println!("Could not copy code to clipboard");
+        }
+    }
 
     println!("Code: {}", code);
 
