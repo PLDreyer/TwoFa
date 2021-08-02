@@ -60,11 +60,7 @@ pub fn read_storage(path: &str) -> Result<String, FileReadError> {
     }
 }
 
-pub fn save_storage(path: &str, data: String, force: Option<bool>) -> Result<(), FileSaveError> {
-    if Path::new(&path).exists() && (force.is_some() && force.unwrap().eq(&false) || force.is_none())  {
-        return Err(FileSaveError::AlreadyExists);
-    }
-
+pub fn save_storage(path: &str, data: String) -> Result<(), FileSaveError> {
     let f = File::create(&path);
     match f {
         Ok(mut file) => {
@@ -94,6 +90,10 @@ pub fn delete_file(path: &str, logger: &Logger) -> Result<(), &'static str> {
     );
 
     Ok(())
+}
+
+pub fn check_storage(path: &str) -> bool {
+    Path::new(&path).exists()
 }
 
 pub fn get_storage_path() -> Storage {

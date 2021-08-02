@@ -178,52 +178,40 @@ pub fn create_twofa_settings_with_input(data: &Opts) -> Result<TwofaSettings, &'
 
     settings.set_secret(data.secret.clone().unwrap());
 
-    if let Some(window) = &data.window {
-        let parsed_integer: u32 = window.as_u64().unwrap().try_into().unwrap();
-        settings.set_window(Some(parsed_integer));
-    } else {
-        settings.set_window(Some(30));
+    let parsed_integer: u32 = data.window.as_u64().unwrap().try_into().unwrap();
+    settings.set_window(Some(parsed_integer));
+
+    match &data.hash[..] {
+        "sha256" => {
+            settings.set_hash(Some(HashFunction::Sha256));
+        },
+        "sha512" => {
+            settings.set_hash(Some(HashFunction::Sha512));
+        },
+        #[allow(deprecated)]
+        "sha1" => {
+            settings.set_hash(Some(HashFunction::Sha1));
+        },
+        _ => {
+            println!("Hash not supported");
+            std::process::exit(0);
+        }
     }
 
-    if let Some(hash) = &data.hash {
-        match &hash[..] {
-            "sha256" => {
-                settings.set_hash(Some(HashFunction::Sha256));
-            },
-            "sha512" => {
-                settings.set_hash(Some(HashFunction::Sha512));
-            },
-            #[allow(deprecated)]
-            "sha1" => {
-                settings.set_hash(Some(HashFunction::Sha1));
-            },
-            _ => {
-                println!("Hash not supported");
-                std::process::exit(0);
-            }
+    match &data.encoding[..] {
+        "base32" => {
+            settings.set_encoding(Some(Encoding::Base32));
+        },
+        "ascii" => {
+            settings.set_encoding(Some(Encoding::Ascii));
+        },
+        "hex" => {
+            settings.set_encoding(Some(Encoding::Hex));
+        },
+        _ => {
+            println!("Unsupported encoding");
+            std::process::exit(1);
         }
-    } else {
-        settings.set_hash(Some(HashFunction::Sha512));
-    }
-
-    if let Some(encoding) = &data.encoding {
-        match &encoding[..] {
-            "base32" => {
-                settings.set_encoding(Some(Encoding::Base32));
-            },
-            "ascii" => {
-                settings.set_encoding(Some(Encoding::Ascii));
-            },
-            "hex" => {
-                settings.set_encoding(Some(Encoding::Hex));
-            },
-            _ => {
-                println!("Unsupported encoding");
-                std::process::exit(1);
-            }
-        }
-    } else {
-        settings.set_encoding(Some(Encoding::Base32));
     }
 
     Ok(settings)

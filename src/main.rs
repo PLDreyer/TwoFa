@@ -6,7 +6,7 @@ mod helper;
 
 use clap::{AppSettings, Clap};
 use serde_json::{from_str, Result as SerdeResult, Value, Map, Number};
-use crate::storage::{read_storage, FileReadError, FileSaveError, save_storage, delete_file, get_storage_path, Storage};
+use crate::storage::{read_storage, FileReadError, save_storage, delete_file, get_storage_path, Storage, check_storage};
 use crate::crypto::{encrypt_file, decrypt_file};
 use crate::twofa::{create_twofa_settings, create_code_with_twofa_settings, create_twofa_settings_with_input};
 use crate::logger::{Logger};
@@ -27,15 +27,15 @@ pub struct Opts {
     #[clap(short, long)]
     /// set secret
     secret: Option<String>,
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "30")]
     /// set window
-    window: Option<Number>,
-    #[clap(short, long)]
+    window: Number,
+    #[clap(short, long, default_value = "sha1")]
     /// set hash
-    hash: Option<String>,
-    #[clap(short, long)]
+    hash: String,
+    #[clap(short, long, default_value = "base32")]
     /// set encoding
-    encoding: Option<String>,
+    encoding: String,
     #[clap(short, long, parse(from_occurrences))]
     /// set debug level
     debug: i32,
@@ -70,7 +70,7 @@ fn main() {
             create_storage(opts, storage_path, logger).expect("Failed to create storage");
         },
         _ => {
-            println!("Action not supported");
+            println!("Action '{}' not supported", &opts.action);
             std::process::exit(1);
         }
     }
@@ -100,15 +100,17 @@ fn set_secret(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(), &
             match e {
                 FileReadError::NoContent => { return Err("No content") },
                 FileReadError::NoFile => {
-                    if let Err(_) = save_storage(&storage_path.de_file[..], String::from("{}"), None) {
-                        logger.norm(
-                            format!("Could not create storage")
-                                .as_str()
-                        );
-                        std::process::exit(1);
-                    };
 
-                    data_from_file.push_str("{}");
+                    if !check_storage(&storage_path.de_file[..]) {
+                        if let Err(_) = save_storage(&storage_path.de_file[..], String::from("{}")) {
+                            println!("Could not save storage");
+                            std::process::exit(1);
+                        }
+                        data_from_file.push_str("{}");
+                    } else {
+                        logger.norm("file exists but could not be read");
+                        std::process::exit(1);
+                    }
                 }
             };
         },
@@ -125,6 +127,18 @@ fn set_secret(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(), &
     }
 
     let mut data = deserialized_data.unwrap();
+
+    if &data[&app] != &Value::Null {
+        let user_prompt = prompt_for_input("Application is already configured. Overwrite ? [y/N] ").unwrap();
+        if user_prompt.ne(&String::from("y")) {
+            println!("Stopping action");
+            if let Err(_) = delete_file(&storage_path.de_file[..], &logger) {
+                println!("Could not delete decrypted file");
+            }
+            std::process::exit(0);
+        }
+    }
+
     let json_data = serde_json::json!({
         app: twofa_settings.to_json()
     });
@@ -136,7 +150,7 @@ fn set_secret(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(), &
             .as_str()
     );
 
-    match save_storage(&storage_path.de_file[..], data.to_string(), Some(true)) {
+    match save_storage(&storage_path.de_file[..], data.to_string()) {
         Err(_) => {
             println!("Could not save storage");
             std::process::exit(1);
@@ -174,7 +188,7 @@ fn get_code(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(), &'s
             match e {
                 FileReadError::NoContent => { return Err("No content") },
                 FileReadError::NoFile => {
-                    if let Err(_) = save_storage(&storage_path.en_file[..], String::from("{}"), None) {
+                    if let Err(_) = save_storage(&storage_path.en_file[..], String::from("{}")) {
                         logger.norm(
                             format!("Could not save storage")
                                 .as_str()
@@ -242,18 +256,22 @@ fn create_storage(opts: Opts, storage_path: Storage, logger: Logger) -> Result<(
     println!("Storagepath Decrypted: {}", &storage_path.de_file[..]);
     println!("Storagepath Encrypted: {}", &storage_path.en_file[..]);
 
-    if let Err(e) = save_storage(&storage_path.de_file[..], String::from("{}"), None) {
-        if let FileSaveError::AlreadyExists = e {
-            let user_prompt = prompt_for_input("Storage already exist. Overwrite ? [y/N] ").unwrap();
-            if user_prompt.ne(&String::from("y")) {
-                println!("Stopping action");
-                std::process::exit(0);
-            }
-            if let Err(_) = save_storage(&storage_path.de_file[..], String::from("{}"), Some(true)) {
-                return Err("Could not overwrite file");
-            }
+    if check_storage(&storage_path.en_file[..]) {
+        let user_prompt = prompt_for_input("Storage already exist. Overwrite ? [y/N] ").unwrap();
+        if user_prompt.ne(&String::from("y")) {
+            println!("Stopping action");
+            std::process::exit(0);
+        }
+        if let Err(_) = save_storage(&storage_path.de_file[..], String::from("{}")) {
+            return Err("Could not overwrite file");
+        }
+    } else {
+        if let Err(_) = save_storage(&storage_path.de_file[..], String::from("{}")) {
+            println!("Could not save storage");
+            std::process::exit(1);
         }
     }
+
 
     if let Err(e) = encrypt_file(&storage_path.de_file[..], &storage_path.en_file[..], &opts.password, &logger) {
         return Err(e);
